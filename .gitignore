@@ -1,0 +1,12 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/Gpio/bin
+/Gpio/obj
+*.suo
+*.user
+/Gpio/project.lock.json
+/ServoDemo/bin/ARM/Debug
+/ServoDemo/obj
+/ServoDemo/project.lock.json

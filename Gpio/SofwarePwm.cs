@@ -4,12 +4,13 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Gpio
 {
 	public class SofwarePwm : IPwm, IDisposable
 	{
-		protected Thread Worker;
+		protected Task Worker;
 		protected volatile bool IsRunning;
 
 
@@ -30,9 +31,8 @@ namespace Gpio
 			if (IsRunning)
 				throw new InvalidOperationException("PWM already started.");
 
-			Worker = new Thread(PwmProc);
-			Worker.Name = "Software PWM Thread";
-			Worker.Priority = ThreadPriority.Highest;
+			Worker = new Task(PwmProc);
+			//Worker.Priority = ThreadPriority.Highest;
 			IsRunning = true;
 			Worker.Start();
 		}
@@ -43,7 +43,7 @@ namespace Gpio
 				throw new InvalidOperationException("PWM not started.");
 
 			IsRunning = false;
-			Worker.Join();
+			Worker.Wait();
 		}
 
 		protected void Restart()
@@ -101,7 +101,7 @@ namespace Gpio
 				while (sw.ElapsedTicks < onTicks) ;
 					//sp.SpinOnce();
 
-				Debug.WriteLine("Total Spin On: " + sw.ElapsedTicks + " and needed " + onTicks);
+				//Debug.WriteLine("Total Spin On: " + sw.ElapsedTicks + " and needed " + onTicks);
 
 				/**** OFF ****/
 				// Turn the pin off for the rest period
@@ -113,7 +113,7 @@ namespace Gpio
 				while (sw.ElapsedTicks < offTicks) ;
 					//sp.SpinOnce();
 
-				Debug.WriteLine("Total Spin Off: " + sw.ElapsedTicks + " and needed " + offTicks);
+				//Debug.WriteLine("Total Spin Off: " + sw.ElapsedTicks + " and needed " + offTicks);
 			}
 
 			// Turn off the PIN when we're done
