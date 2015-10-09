@@ -7,6 +7,8 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
+using System.Threading.Tasks;
 using System.Windows;
 
 
@@ -24,7 +26,7 @@ namespace FaceTrackingPC
 		private HaarObjectDetector Detector;
 		private FaceHaarCascade Cascade;
 
-		private Rectangle? FocusedOnFace;
+		private Rectangle FaceRect;
 		private AForge.Point CameraVector;
 
 		private TcpClient Client;
@@ -32,7 +34,8 @@ namespace FaceTrackingPC
 
 		private static int WIDTH = 1280;
 		private static int HEIGHT = 720;
-		private static double DegreesPerPixel;
+		private static double DegreesPerPixel = 0.1;
+		private DateTime? LastReposition;
 
 		public MainWindow()
 		{
@@ -48,9 +51,12 @@ namespace FaceTrackingPC
 
 		private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
 		{
+			// Wait for the client to get setup
+			await Task.Delay(5000);
+
 			// Setup Socket Client
 			Client = new TcpClient();
-			Client.Connect(IPAddress.Parse("10.10.10.12"), 1911);
+			Client.Connect(IPAddress.Parse("10.10.10.100"), 1911);
 			ClientStream = Client.GetStream();
 
 			// enumerate video devices
@@ -60,8 +66,6 @@ namespace FaceTrackingPC
 			videoSource.SnapshotResolution = videoSource.VideoCapabilities[7];
 			// set NewFrame event handler
 			videoSource.NewFrame += new NewFrameEventHandler(video_NewFrame);
-			// start the video source
-			videoSource.Start();
 
 			// Setup Face Detection
 			Cascade = new FaceHaarCascade();
@@ -72,6 +76,15 @@ namespace FaceTrackingPC
 			Detector.UseParallelProcessing = true;
 			Detector.Suppression = 3;
 
+			// Setup Tracking Data
+			CameraVector.X = 90;
+			CameraVector.Y = 90;
+			//ClientStream.Write(Encoding.UTF8.GetBytes("090,090"), 0, 7);
+
+			//await Task.Delay(3000);
+
+			// start the video source
+			videoSource.Start();
 		}
 
 
@@ -83,46 +96,46 @@ namespace FaceTrackingPC
 			// process the frame
 			var faces = Detector.ProcessFrame(bitmap);
 
-			Debug.WriteLine("Total Objects Detected: " + faces.Length);
+			//if (faces.Length > 0)
+			//	Debug.WriteLine("Total Objects Detected: " + faces.Length);
 
 			if (faces.Length > 0)
-				FocusedOnFace = faces[0];
+				FaceRect = faces[0];
 
-			FollowFace(FocusedOnFace);
+			FollowFace(FaceRect);
 		}
 
 		private void FollowFace(Rectangle? face)
 		{
-
-
 			if (face == null)
 				return;
 
-			Rectangle location = face.Value;
+			if (LastReposition != null && LastReposition.Value.AddSeconds(3) > DateTime.Now)
+				return;
+			else
+				LastReposition = DateTime.Now;
 
-			int offset = location.Left - location.Width;
+			FaceRect = face.Value;
+
+			int offset = FaceRect.Left + (FaceRect.Width / 2);
 			int center = WIDTH / 2;
 
-			int changeDegrees = (int)(Math.Abs(offset - center) * DegreesPerPixel);
-			if (offset < 0 && CameraVector.X - changeDegrees > 0)
-				CameraVector.X -= changeDegrees;
-
-			if (offset > 0 && CameraVector.X + changeDegrees < 180)
+			int changeDegrees = (int)((offset - center) * DegreesPerPixel);
+			if ((CameraVector.X + changeDegrees > 0) && (CameraVector.X + changeDegrees < 180))
 				CameraVector.X += changeDegrees;
 
-			offset = location.Top - location.Height;
+			offset = FaceRect.Top - (FaceRect.Height / 2);
 			center = HEIGHT / 2;
 
-			changeDegrees = (int)(Math.Abs(offset - center) * DegreesPerPixel);
+			changeDegrees = (int)((offset - center) * DegreesPerPixel);
 
-			if (offset < 0 && CameraVector.Y - changeDegrees > 0)
-				CameraVector.Y -= changeDegrees;
-			if (offset > 0 && CameraVector.Y - changeDegrees < 180)
+			if ((CameraVector.Y + changeDegrees > 0) && (CameraVector.Y + changeDegrees < 180))
 				CameraVector.Y += changeDegrees;
 
 			string value = CameraVector.X.ToString().PadLeft(3, '0') + "," + CameraVector.Y.ToString().PadLeft(3, '0');
-			byte[] values = System.Text.Encoding.UTF8.GetBytes(value);
+			byte[] values = Encoding.UTF8.GetBytes(value);
 
+			Debug.WriteLine("Sending Reposition to: " + value);
 			ClientStream.Write(values, 0, values.Length);
 		}
 	}
